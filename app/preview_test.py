@@ -2,7 +2,7 @@ import os
 import pytest
 
 from .preview import Params, extract_latex, preview_function
-from .evaluation_tests import elementary_function_test_cases
+from .evaluation_test import elementary_function_test_cases
 
 
 class TestPreviewFunction():
