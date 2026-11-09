@@ -13,7 +13,9 @@ from sympy.parsing.sympy_parser import parse_expr, split_symbols_custom, _token_
 from sympy.parsing.sympy_parser import T as parser_transformations
 from sympy.printing.latex import LatexPrinter
 from sympy import Basic, Symbol
+import io
 import re
+import tokenize
 from typing import Dict, List, TypedDict
 
 class ModifiedLatexPrinter(LatexPrinter):
@@ -573,6 +575,24 @@ def create_sympy_parsing_params(params, unsplittable_symbols=tuple(), symbol_ass
     return parsing_params
 
 
+def reject_invalid_identifiers(expr):
+    '''
+    Raise ValueError if expr contains a name token that is not a valid Python
+    identifier (e.g. `∞`).
+
+    Python <= 3.11 tokenized such characters as ERRORTOKEN, which made
+    parse_expr fail. From Python 3.12 (PEP 701) they are emitted as NAME
+    tokens, and SymPy's auto_symbol silently turns them into symbols.
+    '''
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(expr).readline))
+    except (tokenize.TokenError, SyntaxError):
+        return  # Leave genuine tokenizer errors for parse_expr to report
+    for token in tokens:
+        if token.type == tokenize.NAME and not token.string.isidentifier():
+            raise ValueError(f"Invalid symbol `{token.string}` in expression `{expr}`")
+
+
 def parse_expression(expr, parsing_params):
     '''
     Input:
@@ -610,6 +630,7 @@ def parse_expression(expr, parsing_params):
         transformations = parser_transformations[0:5, 6]+extra_transformations+(split_symbols_custom(can_split),)+parser_transformations[8]
     if parsing_params.get("rationalise", False):
         transformations += parser_transformations[11]
+    reject_invalid_identifiers(expr)
     if parsing_params.get("simplify", False):
         parsed_expr = parse_expr(expr, transformations=transformations, local_dict=symbol_dict)
         parsed_expr = parsed_expr.simplify()
